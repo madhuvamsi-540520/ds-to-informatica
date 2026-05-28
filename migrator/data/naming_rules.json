@@ -1,0 +1,26 @@
+{
+  "prefixes": {
+    "job": {"remove": ["JOB_", "DS_", "STG_"], "add": "m_"},
+    "sequence": {"remove": ["SEQ_", "JOB_SEQ_"], "add": "wf_"},
+    "routine": {"remove": ["RT_", "ROUTINE_"], "add": "exp_"},
+    "parameter_set": {"remove": ["PS_", "PSET_"], "add": "pm_"},
+    "connection": {"remove": ["CONN_", "CON_"], "add": "conn_"}
+  },
+  "case": "snake_case",
+  "replacements": {
+    " ": "_",
+    "-": "_",
+    ".": "_"
+  },
+  "layer_mapping": {
+    "STG": "stg",
+    "STAGE": "stg",
+    "STAGING": "stg",
+    "ODS": "ods",
+    "DW": "dw",
+    "DWH": "dw",
+    "MART": "mart",
+    "RPT": "rpt",
+    "REPORT": "rpt"
+  }
+}

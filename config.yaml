@@ -1,0 +1,33 @@
+claude:
+  model: claude-sonnet-4-6
+  temperature:
+    code_translation: 0.0
+    design_analysis: 0.2
+  max_tokens:
+    basic_translation: 1024
+    cpp_rewriting: 2048
+    design_review: 2048
+    dependency_analysis: 2048
+  rate_limit:
+    requests_per_minute: 10
+    batch_delay_seconds: 60
+  retries: 3
+  timeout_seconds: 60
+
+cost_circuit_breaker:
+  acc02: 0.10
+  acc08: 0.15
+  acc09: 0.20
+  acc10: 0.15
+
+confidence_threshold: 80
+
+scoring:
+  points_per_stage: 1
+  points_per_custom_operator: 5
+  points_per_basic_routine: 3
+  points_per_sequence_job: 2
+  complex_threshold: 30
+  high_complexity_threshold: 50
+
+output_dir: output

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<DSExport>
+  <Job identifier="JOB_Load_Customer_Staging" jobType="Parallel">
+    <Stage identifier="SRC_Customer_File" stageType="Sequential File"/>
+    <Stage identifier="TRF_Customer_Transform" stageType="Transformer">
+      <Expression>Trim(Upcase(Customer_Name))</Expression>
+      <Expression>If IsNull(Middle_Name) Then 'N/A' Else Middle_Name</Expression>
+    </Stage>
+    <Stage identifier="AGG_Customer_Summary" stageType="Aggregator"/>
+    <Stage identifier="TGT_Customer_DB" stageType="DB2 Connector"/>
+    <Parameter identifier="DB_HOST" parameterType="String" default="localhost" encrypted="0"/>
+    <Parameter identifier="DB_PASS" parameterType="Encrypted" default="" encrypted="1"/>
+  </Job>
+
+  <Job identifier="SEQ_Nightly_Load" jobType="Sequence">
+    <Stage identifier="JOB_Load_Customer_Staging" stageType="JobActivity"/>
+    <Stage identifier="JOB_Transform_Core" stageType="JobActivity"/>
+    <Stage identifier="JOB_Load_Mart" stageType="JobActivity"/>
+    <JobActivity jobName="JOB_Transform_Core"/>
+    <JobActivity jobName="JOB_Load_Mart"/>
+  </Job>
+
+  <Job identifier="JOB_Custom_Hash" jobType="Parallel">
+    <Stage identifier="SRC_Input" stageType="Sequential File"/>
+    <Stage identifier="CUSTOM_Hash_Operator" stageType="CustomStage"/>
+    <Stage identifier="TGT_Output" stageType="Sequential File"/>
+  </Job>
+
+  <ParameterSet identifier="PS_Database_Config">
+    <Parameter identifier="DB_HOST" parameterType="String" default="prod-db.example.com" encrypted="0"/>
+    <Parameter identifier="DB_PORT" parameterType="Integer" default="5432" encrypted="0"/>
+    <Parameter identifier="DB_USER" parameterType="String" default="etl_user" encrypted="0"/>
+    <Parameter identifier="DB_PASS" parameterType="Encrypted" default="" encrypted="1"/>
+  </ParameterSet>
+
+  <Connection identifier="CONN_Source_Oracle" connectionType="Oracle"
+    host="oracle-src.example.com" port="1521" database="ORCL" username="ds_user"/>
+
+  <Connection identifier="CONN_Target_Snowflake" connectionType="Snowflake"
+    host="account.snowflakecomputing.com" port="443" database="DW" username="etl_svc"/>
+</DSExport>
