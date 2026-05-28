@@ -32,5 +32,10 @@
   "Switch": {"idmc_equivalent": "Router Transformation", "equivalency": "Direct", "action": "Map"},
   "XML Input": {"idmc_equivalent": "XML Parser Transformation", "equivalency": "Partial", "action": "Review"},
   "XML Output": {"idmc_equivalent": "XML Generator Transformation", "equivalency": "Partial", "action": "Review"},
-  "Complex Flat File": {"idmc_equivalent": "Complex File Connector", "equivalency": "Partial", "action": "Review"}
+  "Complex Flat File": {"idmc_equivalent": "Complex File Connector", "equivalency": "Partial", "action": "Review"},
+  "JobActivity": {"idmc_equivalent": "Mapping Task (Taskflow)", "equivalency": "Direct", "action": "Map"},
+  "RoutineActivity": {"idmc_equivalent": "Command Task (Taskflow)", "equivalency": "Direct", "action": "Map"},
+  "NotificationActivity": {"idmc_equivalent": "Notification Task (Taskflow)", "equivalency": "Direct", "action": "Map"},
+  "ExecCommandActivity": {"idmc_equivalent": "Command Task (Taskflow)", "equivalency": "Direct", "action": "Map"},
+  "TerminatorActivity": {"idmc_equivalent": "End Task (Taskflow)", "equivalency": "Direct", "action": "Map"}
 }
