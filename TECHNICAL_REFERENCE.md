@@ -28,6 +28,15 @@
 15. [Cost Model](#15-cost-model)
 16. [Human Review Process](#16-human-review-process)
 17. [Quick-Start for New Engineers](#17-quick-start-for-new-engineers)
+18. [Success Metrics & KPIs](#18-success-metrics--kpis)
+
+**Appendices**
+- [Appendix A: Accelerator Execution Order](#appendix-a-accelerator-execution-order-phase-dependencies)
+- [Appendix B: Prompt Templates Reference](#appendix-b-prompt-templates-reference)
+- [Appendix C: Acceptance Criteria per Accelerator](#appendix-c-acceptance-criteria-per-accelerator)
+- [Appendix D: SDD Pre-Deployment Checklist](#appendix-d-sdd-pre-deployment-checklist)
+- [Appendix E: Complete Workflow Example](#appendix-e-complete-workflow-example-500-job-estate)
+- [Appendix F: Glossary](#appendix-f-glossary)
 
 ---
 
@@ -755,6 +764,8 @@ output_dir: output
 ANTHROPIC_API_KEY=sk-ant-...        # Required for any Claude-API accelerators
 ```
 
+> **Model name note:** The original spec (`ibm-infa-etl-migration-ai-spec.md`) references `claude-3-5-sonnet-20241022` in its prompt examples and cost tables. The actual deployed model is `claude-sonnet-4-6` (set in `config.yaml`). All cost estimates and temperature settings in this document reflect the live config. The spec's model references are outdated and should be read as illustrative only.
+
 ---
 
 ## 12. Testing Strategy
@@ -813,6 +824,8 @@ See `ibm-infa-etl-migration-ai-spec.md` Section 7.2 for the full matrix. Key edg
 ---
 
 ## 13. Development Roadmap
+
+> **Phasing terminology note:** The original spec (Section 5.1) also uses "Phase 1–4" to describe the *accelerator rollout order* during a live migration project (e.g., "Week 1–2: deploy rule-based accelerators"). That is a different concept from the development phases below. To avoid confusion: phases below = **development work remaining**; spec's phases = **how to run the tool on a client engagement**.
 
 ### Phase 1: Backend Polish (Current Sprint)
 
@@ -1047,6 +1060,23 @@ See [Section 13 — Development Roadmap](#13-development-roadmap) for the full p
 
 ---
 
+## 18. Success Metrics & KPIs
+
+Track these KPIs at the end of each migration engagement to measure platform effectiveness. These are the formal targets from the spec.
+
+| Metric | Target | What it means if missed |
+|---|---|---|
+| **Rule-Based Coverage** | ≥ 80% of jobs handled without AI | More Claude calls = higher cost and review burden |
+| **Claude Translation Accuracy** | ≥ 85% pass QA on first try | Low accuracy means prompt tuning is needed |
+| **Cost per Job** | < $0.05 | Hybrid approach should keep 500-job estate under $25 total |
+| **Human Review Time** | < 2 hours per 10 complex jobs | Higher means Claude output quality is too low |
+| **Wave Execution Time vs DataStage** | < 20% longer in IDMC | IDMC design is inefficient; revisit ACC-09 recommendations |
+| **Production SLA Met** | 100% | Zero unplanned failures due to migration error |
+
+**How to track:** After each engagement, run a retrospective against these numbers. If accuracy falls below 85%, review and iterate on the prompt templates (see Appendix C).
+
+---
+
 ## Appendix A: Accelerator Execution Order (Phase Dependencies)
 
 ```
@@ -1079,7 +1109,347 @@ PHASE 4 — Human review + IDMC import (per wave)
 
 ---
 
-## Appendix B: Glossary
+## Appendix B: Prompt Templates Reference
+
+These are the exact prompts used inside each AI accelerator. Engineers debugging output quality or writing new test cases should start here. Each prompt is also embedded in the relevant accelerator Python file.
+
+### ACC-02: BASIC Routine Translation
+
+```
+You are an ETL migration specialist fluent in DataStage BASIC and Informatica expression languages.
+
+Convert this DataStage BASIC Transformer expression to Informatica CDI expression language.
+
+BASIC Expression:
+---
+{basic_code}
+---
+
+Column Context:
+- Input columns: {input_columns}
+- Output columns: {output_columns}
+
+Translation Rules:
+1. Use Informatica built-in functions only (no custom Java unless necessary)
+2. Handle NULLs safely (use IIF + ISNULL)
+3. Preserve exact business logic
+4. Provide assumptions if you make any
+
+Output format (STRICT — no extra text):
+TRANSLATED EXPRESSION:
+[expression here]
+
+ASSUMPTIONS:
+[list assumptions or write NONE]
+
+REVIEW NOTES:
+[flag anything needing engineer check or write NONE]
+
+CONFIDENCE: [0-100]
+```
+
+**Temperature:** 0.0 (deterministic)  
+**Max tokens:** 1024  
+**File:** `migrator/accelerators/acc02_basic.py`
+
+---
+
+### ACC-05: Sequence Job → Taskflow Optimizer
+
+```
+You are an ETL orchestration specialist. Review this Taskflow execution plan and suggest optimizations.
+
+Current Taskflow (sequential):
+{task_list_with_times}
+
+Constraints:
+{dependency_constraints}
+
+Questions:
+1. Which tasks can run in parallel?
+2. What is the critical path?
+3. Are there missing error recovery steps?
+4. Should we add checkpoints?
+
+Respond in structured format: Optimized Order, Parallelism, Error Handling Gaps.
+```
+
+**Temperature:** 0.2  
+**Max tokens:** 2048  
+**File:** `migrator/accelerators/acc05_taskflow.py`
+
+---
+
+### ACC-08: C++ Operator → Java Rewriter
+
+```
+You are a bilingual Java/C++ developer specializing in data transformation algorithms.
+
+Convert this C++ DataStage custom operator to Java for Informatica CDI Java Transformation.
+
+C++ Operator Source:
+---
+{cpp_source_code}
+---
+
+Functional Specification:
+- Purpose: {functional_specification}
+- Input schema: {input_schema}
+- Output schema: {output_schema}
+- Known edge cases: {edge_cases}
+
+Constraints:
+1. Target: Java {target_java_version}+
+2. Must run in IDMC containerized environment (no file I/O, limited network)
+3. Should use Informatica Java API if available
+4. Thread-safe preferred (may process in parallel)
+
+Output format:
+JAVA CODE:
+[Complete, runnable Java class]
+
+ASSUMPTIONS:
+[Any assumptions about input data or environment]
+
+UNSUPPORTED FEATURES:
+[List any C++ features that don't have direct Java equivalents; recommend workarounds]
+
+EXTERNAL DEPENDENCIES:
+[List any external libraries; flag if unavailable in IDMC runtime]
+```
+
+**Temperature:** 0.0 (deterministic)  
+**Max tokens:** 2048  
+**File:** `migrator/accelerators/acc08_cpp.py`
+
+---
+
+### ACC-09: Anti-Pattern Detection & Design Review
+
+```
+You are an Informatica IDMC design architect reviewing a mapping for best practices.
+
+Audit this mapping design for issues, anti-patterns, and optimization opportunities.
+
+Mapping Specification:
+---
+{mapping_spec}
+---
+
+Context:
+- Load volume: {load_volume_rows} rows
+- SLA: {sla_minutes} minutes
+- Source system: {source_system}
+- Target system: {target_system}
+
+Review Criteria (prioritized):
+1. CRITICAL: Hard-coded values, security risks, data loss
+2. HIGH: Performance issues, missing error handling, SLA risk
+3. MEDIUM: Design improvements, idiomatic patterns
+4. LOW: Code style, documentation
+
+Output format:
+ISSUES FOUND:
+- [Severity: CRITICAL/HIGH/MEDIUM/LOW]
+  Description: [What is wrong]
+  Impact: [Why it matters]
+  Suggested Fix: [Code snippet or approach]
+
+BEST PRACTICES:
+- [Recommendation]
+
+QUESTIONS FOR ENGINEER:
+- [Clarification needed]
+
+CONFIDENCE LEVEL: [0-100]
+```
+
+**Temperature:** 0.2  
+**Max tokens:** 2048  
+**File:** `migrator/accelerators/acc09_review.py`
+
+---
+
+### ACC-10: Job Dependency & Impact Analysis
+
+```
+You are an ETL architecture strategist. Analyze this job dependency graph and recommend a migration strategy.
+
+Job Dependency Graph:
+{job_dependency_graph}
+
+Business Context:
+- Load window: {load_window_start}:00 – {load_window_end}:00
+- Affected reports: {affected_reports_count}
+- SLA: {sla_minutes} minutes
+
+Migration Constraints:
+- Max parallel jobs: {max_parallel_jobs}
+- Max wave size: {max_wave_size}
+- Pilot target: {pilot_job_count} jobs
+
+Questions:
+1. What is the recommended migration wave order?
+2. Which jobs should be migrated first to de-risk later waves?
+3. What is the critical path? Will we meet SLA?
+4. What rollback/runback strategy is needed?
+5. Are there hidden dependencies not visible in the job graph?
+
+Respond with:
+- Recommended Wave Plan (Pilot: [jobs], Wave 1: [jobs], Wave 2: [jobs])
+- Risk Assessment (critical path, SLA impact, failure scenarios)
+- Rollback Strategy (parallel run, shadow traffic, switch plan)
+- Hidden Dependencies (if any)
+```
+
+**Temperature:** 0.2  
+**Max tokens:** 2048  
+**File:** `migrator/accelerators/acc10_dependency.py`
+
+---
+
+## Appendix C: Acceptance Criteria per Accelerator
+
+Use these checklists during QA review of each accelerator's output. An output is only approved for IDMC import when all applicable boxes are checked.
+
+### ACC-02: BASIC Translator
+
+**Functional:**
+- [ ] Translated expression is syntactically valid Informatica (parseable)
+- [ ] Business logic matches BASIC intent
+- [ ] All input columns appear in output (no drops)
+- [ ] Data type conversions are handled
+
+**Quality:**
+- [ ] Confidence score ≥ 80, OR `requires_human_review = true`
+- [ ] All assumptions are explicitly listed
+- [ ] Warnings are clear and actionable
+
+**Performance:**
+- [ ] API latency ≤ 10 seconds
+- [ ] Cost ≤ $0.10 per call
+
+**Compliance:**
+- [ ] No sensitive data (passwords, keys) in output
+- [ ] Output is idiomatic Informatica (not literal translation)
+
+---
+
+### ACC-08: C++ Operator Rewriter
+
+**Functional:**
+- [ ] Java code is syntactically valid and compilable (Java 11+)
+- [ ] Input schema is fully honored (all parameters used)
+- [ ] Output schema is fully produced (all columns generated)
+- [ ] Edge cases (nulls, type coercion) are handled safely
+
+**Security:**
+- [ ] No hardcoded credentials in Java code
+- [ ] File I/O and network calls are flagged if present
+- [ ] All external dependencies are declared
+
+**Quality:**
+- [ ] Confidence score ≥ 85, OR explicit review flag
+- [ ] Unsupported C++ features are clearly listed with workarounds
+
+**Performance:**
+- [ ] API latency ≤ 15 seconds
+- [ ] Cost ≤ $0.15 per call
+
+---
+
+### ACC-09: Design Review
+
+**Functional:**
+- [ ] All issues found are legitimate (no false positives)
+- [ ] Each issue has severity, description, impact, and fix
+- [ ] No duplicate issues reported
+
+**Actionability:**
+- [ ] Every issue has a suggested fix
+- [ ] Fix complexity is rated (TRIVIAL / SIMPLE / MEDIUM / COMPLEX)
+- [ ] Fixes are implementable by a mid-level engineer
+
+**Performance:**
+- [ ] API latency ≤ 15 seconds
+- [ ] Cost ≤ $0.20 per call
+
+---
+
+### ACC-10: Dependency Analysis
+
+**Functional:**
+- [ ] Wave plan respects all job dependencies (no forward dependencies violated)
+- [ ] Critical path is calculated correctly
+- [ ] Circular dependencies are detected and error raised
+- [ ] Hidden dependencies are identified (if any)
+
+**Actionability:**
+- [ ] Wave plan is executable (engineer can follow it step by step)
+- [ ] Rollback strategy has step-by-step instructions
+- [ ] Go/No-Go criteria per wave are clear
+
+**Performance:**
+- [ ] API latency ≤ 20 seconds
+- [ ] Cost ≤ $0.15 per call
+
+---
+
+## Appendix D: SDD Pre-Deployment Checklist
+
+Use this before deploying the platform to a new client engagement.
+
+### Pre-Deployment
+
+**Infrastructure:**
+- [ ] Anthropic API key created and secured in secrets manager (not in `config.yaml`)
+- [ ] Model availability verified (`claude-sonnet-4-6`)
+- [ ] Rate limiting policy confirmed (10 req/min, batch delays)
+- [ ] Cost budget approved (expected: < $15 for 500-job estate)
+
+**Testing:**
+- [ ] All existing tests pass (`pytest tests/`)
+- [ ] Sample DSX run completes without errors
+- [ ] At least 5–10 representative jobs tested through AI accelerators
+- [ ] Human review checklist templates distributed to review engineers
+
+**Process:**
+- [ ] Review SLAs documented (CRITICAL: 4h, HIGH: 24h, INFO: 48h)
+- [ ] Escalation path defined (who approves CRITICAL issues)
+- [ ] Rollback plan documented (how to revert a wave if IDMC import fails)
+
+### Deployment Readiness Gates
+
+- [ ] Phase 1 output validated against manual review (ACC-01 classification correct)
+- [ ] Pilot wave (Wave 0) completed successfully and signed off
+- [ ] Row counts post-migration match source ± 0.1%
+- [ ] All CRITICAL issues from ACC-09 resolved before Wave 1
+
+---
+
+## Appendix E: Complete Workflow Example (500-Job Estate)
+
+**Scenario:** Client has 500 DataStage jobs. 40 jobs have BASIC routines. 8 jobs have C++ custom operators.
+
+| Week | Activity | Accelerators | Cost |
+|---|---|---|---|
+| **Week 1** | Run all rule-based accelerators. Extract DSX → classify all stages. Score all 500 jobs. Identify 40 BASIC + 8 C++ jobs. | ACC-01, 03, 04, 06, 07 | $0.00 |
+| **Week 2** | Batch 40 BASIC jobs into 4 groups. Send each group to Claude. Assign review engineers. QA 24–48 hours. | ACC-02 | ~$0.08 |
+| **Week 3** | Send 8 C++ operators to Claude. Engineers review and refine Java code. | ACC-08 | ~$0.48 |
+| **Week 4** | Design review for 120 flagged jobs (30% of estate + all complex jobs). Engineers action recommendations. | ACC-09 | ~$1.20 |
+| **Week 5** | Run dependency analysis once across full job graph. Generate wave plan. | ACC-10 | ~$0.07 |
+| **Week 5+** | Execute Pilot (Wave 0): 20 highest-confidence jobs. Validate. Sign off. Proceed to Wave 1–N. | Human review | $0.00 |
+
+**Totals:**
+- AI cost: ~$1.83 for 500 jobs (**$0.004 per job**)
+- Human review effort: ~60 hours (12h BASIC, 16h C++, 24h design, 8h dependency)
+- Ready for pilot after Week 5
+
+**This is the target benchmark for all future engagements.**
+
+---
+
+## Appendix F: Glossary
 
 | Term | Meaning |
 |---|---|
